@@ -530,7 +530,38 @@ Route53.prototype.pollChangeUntilInSync = function(changeId, pollEvery) {
 
     return ee;
 };
+Route53.prototype.deleteZone = function(args, pollEvery, callback) {
+    var self = this;
 
+    // see if the user wants to poll for status completion
+    if ( typeof pollEvery === 'function' ) {
+        callback = pollEvery;
+        pollEvery = undefined;
+    }
+
+    var realArgs = {
+        Id    : args.zoneId
+    };
+    self.client.deleteHostedZone(realArgs, function(err, response) {
+      if (err) {
+          err = makeError(err);
+          return callback(err);
+      }
+      var changeInfo = response.ChangeInfo;
+      var zone = {
+          zoneId      : args.zoneId,
+          status      : changeInfo.Status,
+          submittedAt : changeInfo.SubmittedAt,
+          changeId    : extractChangeId(changeInfo.Id),
+      };
+      // if we want to poll for when this change is INSYNC, do it now
+      var ee;
+      if ( pollEvery ) {
+          ee = self.pollChangeUntilInSync(zone.changeId, pollEvery);
+      }
+      callback(null, zone, ee);
+    });
+};
 // ----------------------------------------------------------------------------
 
 module.exports = Route53;
